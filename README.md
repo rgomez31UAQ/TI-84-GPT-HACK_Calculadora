@@ -29,11 +29,12 @@ A mod for the TI-84 Plus Silver Edition & TI-84 Plus C Silver Edition calculator
 ## Setup
 
 ### 1. ESP32 Setup
-1. Flash the code in `/esp32` to your ESP32
-2. No configuration files needed!
+1. Open `/esp32/esp32.ino` in Arduino IDE
+2. Flash the code to your ESP32
+3. No configuration files needed!
 
 ### 2. WiFi Configuration (Captive Portal)
-1. Power on the ESP32
+1. Power on your calculator
 2. Connect to the WiFi network named **"calc"** from your phone/computer
 3. A captive portal will automatically open (or navigate to `192.168.4.1`)
 4. Enter your WiFi name and password
