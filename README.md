@@ -1,34 +1,106 @@
-# TI-32
+# ti-67 pandy
 
-A mod for the TI-84 Plus Silver Edition & TI-84 Plus C Silver Edition calculators to give them internet access and add other features, like test mode breakout and camera support
+A mod for the TI-84 Plus Silver Edition & TI-84 Plus C Silver Edition calculators to give them internet access and add other features, like test mode breakout and camera support.
 
 ![built pcb](./pcb/built.png)
 
-## Features to be Added
+## About
 
-- Change Wi-Fi settings directly from calculator
-- Watchdog when receiving items
+**Author:** Andy (ChinesePrince07)
+
+## Features
+
+- ChatGPT integration - ask questions directly from your calculator
+- Wi-Fi connectivity via ESP32 with **captive portal configuration**
+- Program downloads over the air
+- Image display support
+- Chat functionality
+- Persistent WiFi settings (survives reboots)
+
+## Hardware Required
+
+- TI-84 Plus Silver Edition or TI-84 Plus C Silver Edition
+- ESP32-C3 (XIAO recommended) or ESP32-S3 Sense (for camera)
+- Custom PCB (gerber files in `/pcb/0.1/`)
+- 4x 1kΩ resistors
+- 2x MOSFETs (AO3401)
+- Wires and soldering equipment
+
+## Setup
+
+### 1. Server Setup
+```bash
+cd server
+npm install
+npm start
+```
+The server runs on port 8080 by default. Use ngrok or similar to expose it:
+```bash
+ngrok http 8080
+```
+
+### 2. ESP32 Setup
+1. Flash the code in `/esp32` to your ESP32
+2. **No need to edit any config files!**
+
+### 3. WiFi Configuration (Captive Portal)
+1. Power on the ESP32
+2. Connect to the WiFi network named **"calc"** from your phone/computer
+3. A captive portal will automatically open (or navigate to `192.168.4.1`)
+4. Enter your settings:
+   - **Hotspot Name (SSID):** Your phone's hotspot or home WiFi name
+   - **Hotspot Password:** Your WiFi password
+   - **Server URL:** Your ngrok URL (e.g., `https://xxx.ngrok-free.app`)
+   - **Chat Name:** Your display name in chat (optional)
+5. Click "Save & Connect"
+6. The ESP32 will connect to your network and remember the settings
+
+### 4. Calculator Setup
+Transfer the LAUNCHER program to your calculator using the TI-32 menu.
+
+## Reconfiguring WiFi
+
+If you need to change WiFi settings:
+- **Method 1:** The captive portal is available for a few seconds on every boot
+- **Method 2:** Send command 15 (reset_config) from the calculator to clear saved settings
+- **Method 3:** Erase ESP32 flash and re-upload the firmware
+
+## Commands
+
+| ID | Command | Description |
+|----|---------|-------------|
+| 0 | connect | Connect to configured WiFi |
+| 1 | disconnect | Disconnect from WiFi |
+| 2 | gpt | Query ChatGPT |
+| 5 | launcher | Transfer launcher program |
+| 9 | image_list | List available images |
+| 10 | fetch_image | Download image to calculator |
+| 11 | fetch_chats | Get chat messages |
+| 12 | send_chat | Send chat message |
+| 13 | program_list | List available programs |
+| 14 | fetch_program | Download program |
+| 15 | reset_config | **Reset WiFi configuration** |
+
+## Planned Features
+
+- ~~Change Wi-Fi settings directly from calculator~~ **Done!**
 - Support for color images
-- Action text during waiting phase
-- Support for multi-page response from GPT
-- Support for chat history from GPT
-- Support for bigger menu (320x240 resolution only)
-- Support for lowercase text
-- Documentation
-- Basic Web Browsing
-- HTTPS Encryption
-- Email Send and Read
-- Discord Access
-- Get local weather
-- Control computer wirelessly
-- QR Code & Barcode scanner
-- Video player
+- Multi-page GPT responses
+- Chat history
+- Basic web browsing
+- Weather integration
+- Camera support (ESP32-S3)
 
-## Bug Fixes
+## Known Issues
 
-- Images don't work
-- GPT Menu closes immediately when receiving response
-- App transfer fails
+- Images don't work consistently
+- ~~GPT menu may close immediately when receiving response~~ **Fixed!**
+- App transfer occasionally fails
 
-## Video
-[![YouTube](http://i.ytimg.com/vi/Bicjxl4EcJg/hqdefault.jpg)](https://www.youtube.com/watch?v=Bicjxl4EcJg)
+## Credits
+
+- Rebuilt and maintained by Andy (ChinesePrince07)
+
+## License
+
+GPL v3 - See [LICENSE](LICENSE) for details.
