@@ -2,7 +2,6 @@
 // Author:  Andy (ChinesePrince07)
 // Date:    2025
 
-#include "./secrets.h"
 #include "./launcher.h"
 #include <TICL.h>
 #include <CBL2.h>
@@ -13,6 +12,25 @@
 #include <HTTPClient.h>
 #include <UrlEncode.h>
 #include <Preferences.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+
+// Default server URL
+#define SERVER "https://jemma-nonrotating-ayden.ngrok-free.app"
+
+// Captive portal settings
+#define AP_SSID "calc"
+#define AP_PASS ""
+#define DNS_PORT 53
+
+WebServer webServer(80);
+DNSServer dnsServer;
+bool portalActive = false;
+
+// Stored WiFi credentials
+String storedSSID = "";
+String storedPass = "";
+String storedChatName = "calculator";
 
 // #define CAMERA
 
@@ -156,6 +174,158 @@ int sendProgramVariable(const char* name, uint8_t* program, size_t variableSize)
 
 bool camera_sign = false;
 
+// Captive portal HTML
+const char* portalHTML = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TI-84 WiFi Setup</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; margin: 0; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: white; border-radius: 16px; padding: 32px; max-width: 380px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        h1 { margin: 0 0 8px 0; font-size: 24px; color: #1a1a2e; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
+        .logo { text-align: center; margin-bottom: 16px; }
+        .logo img { width: 64px; height: 64px; border-radius: 50%; }
+        label { display: block; margin-bottom: 6px; font-weight: 600; color: #333; font-size: 14px; }
+        input { width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; margin-bottom: 16px; }
+        input:focus { outline: none; border-color: #4a6cf7; }
+        button { width: 100%; padding: 16px; background: linear-gradient(135deg, #4a6cf7 0%, #6366f1 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><img src="https://avatars.githubusercontent.com/u/94189480?v=4&size=64"></div>
+        <h1>TI-84 WiFi Setup</h1>
+        <p class="subtitle">Configure your calculator's WiFi connection</p>
+        <form action="/save" method="POST">
+            <label>WiFi Network Name</label>
+            <input type="text" name="ssid" placeholder="Enter your WiFi SSID" required>
+            <label>WiFi Password</label>
+            <input type="password" name="password" placeholder="Enter your WiFi password">
+            <label>Chat Name (optional)</label>
+            <input type="text" name="chatname" placeholder="Your display name" value="calculator">
+            <button type="submit">Save & Connect</button>
+        </form>
+        <div class="footer">TI-84 GPT HACK by Andy</div>
+    </div>
+</body>
+</html>
+)rawliteral";
+
+const char* successHTML = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Connected!</title>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .box { text-align: center; padding: 40px; }
+        h1 { color: #4ade80; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Connected!</h1>
+        <p>WiFi credentials saved. You can close this page.</p>
+    </div>
+</body>
+</html>
+)rawliteral";
+
+void handleRoot() {
+  webServer.send(200, "text/html", portalHTML);
+}
+
+void handleSave() {
+  storedSSID = webServer.arg("ssid");
+  storedPass = webServer.arg("password");
+  storedChatName = webServer.arg("chatname");
+
+  // Save to preferences
+  prefs.begin("wifi", false);
+  prefs.putString("ssid", storedSSID);
+  prefs.putString("pass", storedPass);
+  prefs.putString("chatname", storedChatName);
+  prefs.end();
+
+  Serial.println("Saved WiFi credentials:");
+  Serial.println("SSID: " + storedSSID);
+  Serial.println("Chat Name: " + storedChatName);
+
+  webServer.send(200, "text/html", successHTML);
+
+  delay(2000);
+  portalActive = false;
+
+  // Try to connect
+  WiFi.softAPdisconnect(true);
+  WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+}
+
+void handleNotFound() {
+  webServer.sendHeader("Location", "http://192.168.4.1/", true);
+  webServer.send(302, "text/plain", "");
+}
+
+void startCaptivePortal() {
+  Serial.println("[Starting Captive Portal]");
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID, AP_PASS);
+
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
+
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+
+  webServer.on("/", handleRoot);
+  webServer.on("/save", HTTP_POST, handleSave);
+  webServer.onNotFound(handleNotFound);
+  webServer.begin();
+
+  portalActive = true;
+  Serial.println("Captive portal started on SSID: calc");
+}
+
+void loadSavedCredentials() {
+  prefs.begin("wifi", true);
+  storedSSID = prefs.getString("ssid", "");
+  storedPass = prefs.getString("pass", "");
+  storedChatName = prefs.getString("chatname", "calculator");
+  prefs.end();
+}
+
+void tryAutoConnect() {
+  if (storedSSID.length() > 0) {
+    Serial.println("Found saved credentials, connecting...");
+    Serial.println("SSID: " + storedSSID);
+    WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+      delay(500);
+      Serial.print(".");
+      attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nConnected to WiFi!");
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
+    } else {
+      Serial.println("\nFailed to connect, starting captive portal");
+      startCaptivePortal();
+    }
+  } else {
+    Serial.println("No saved credentials, starting captive portal");
+    startCaptivePortal();
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("[CBL]");
@@ -246,12 +416,23 @@ void setup() {
   delay(100);
   memset(data, 0, MAXDATALEN);
   memset(header, 0, 16);
+
+  // Load saved WiFi credentials and try to connect
+  loadSavedCredentials();
+  tryAutoConnect();
+
   Serial.println("[ready]");
 }
 
 void (*queued_action)() = NULL;
 
 void loop() {
+  // Handle captive portal
+  if (portalActive) {
+    dnsServer.processNextRequest();
+    webServer.handleClient();
+  }
+
   if (queued_action) {
     // dont ask me why you need this, but it fails otherwise.
     // probably relates to a CBL2 timeout thing?
@@ -468,20 +649,29 @@ int makeRequest(String url, char* result, int resultLen, size_t* len) {
 }
 
 void connect() {
-  const char* ssid = WIFI_SSID;
-  const char* pass = WIFI_PASS;
+  if (storedSSID.length() == 0) {
+    setError("no wifi configured");
+    return;
+  }
   Serial.print("SSID: ");
-  Serial.println(ssid);
+  Serial.println(storedSSID);
   Serial.print("PASS: ");
   Serial.println("<hidden>");
-  WiFi.begin(ssid, pass);
-  while (WiFi.status() != WL_CONNECTED) {
+  WiFi.begin(storedSSID.c_str(), storedPass.c_str());
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    attempts++;
     if (WiFi.status() == WL_CONNECT_FAILED) {
       setError("failed to connect");
       return;
     }
   }
-  setSuccess("connected");
+  if (WiFi.status() == WL_CONNECTED) {
+    setSuccess("connected");
+  } else {
+    setError("connection timeout");
+  }
 }
 
 void disconnect() {
